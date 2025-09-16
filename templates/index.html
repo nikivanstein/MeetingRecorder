@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Meeting Recorder</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Meeting Recorder</h1>
+        <p>
+          Record a meeting, transcribe it with speaker identification, and generate a
+          summary with action items.
+        </p>
+      </header>
+
+      <section class="controls">
+        <button id="start-btn">Start Recording</button>
+        <button id="pause-btn" disabled>Pause</button>
+        <button id="resume-btn" disabled>Resume</button>
+        <button id="stop-btn" disabled>Stop</button>
+        <span id="status" role="status"></span>
+      </section>
+
+      <section id="results" class="hidden">
+        <h2>Results</h2>
+
+        <article>
+          <h3>Summary</h3>
+          <p id="summary"></p>
+        </article>
+
+        <article>
+          <h3>Action Items</h3>
+          <ul id="action-items"></ul>
+        </article>
+
+        <article>
+          <h3>Speaker Labels</h3>
+          <p class="hint">
+            Update the speaker names below to make the transcript easier to read.
+          </p>
+          <div id="speaker-labels"></div>
+        </article>
+
+        <article>
+          <h3>Transcript</h3>
+          <pre id="transcript"></pre>
+        </article>
+
+        <section class="export">
+          <h3>Export</h3>
+          <label>
+            File name
+            <input id="file-name" type="text" placeholder="meeting_notes.txt" />
+          </label>
+          <label class="inline">
+            <input id="send-email" type="checkbox" {% if email_enabled %}checked{% endif %} />
+            Email the result
+          </label>
+          <label id="email-address-wrapper" class="inline">
+            Email address
+            <input
+              id="email-address"
+              type="email"
+              placeholder="{{ default_recipient }}"
+              value="{{ default_recipient }}"
+            />
+          </label>
+          <button id="save-btn">Save Results</button>
+          <span id="export-status" role="status"></span>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      window.APP_CONFIG = {
+        emailEnabled: {{ 'true' if email_enabled else 'false' }},
+      };
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  </body>
+</html>

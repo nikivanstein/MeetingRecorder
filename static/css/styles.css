@@ -1,0 +1,114 @@
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f8f9fb;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+header {
+  margin-bottom: 2rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+.controls button {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 4px;
+  background: #0b5ed7;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.controls button[disabled] {
+  background: #9aa0b1;
+  cursor: not-allowed;
+}
+
+.controls button:not([disabled]):hover {
+  background: #0949a5;
+}
+
+#status,
+#export-status {
+  font-style: italic;
+}
+
+.hidden {
+  display: none;
+}
+
+article {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+pre {
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.export label {
+  display: block;
+  margin-bottom: 0.8rem;
+}
+
+.export label.inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.export button {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 4px;
+  background: #198754;
+  color: white;
+  cursor: pointer;
+}
+
+.hint {
+  color: #495057;
+  font-size: 0.9rem;
+}
+
+#speaker-labels {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+#speaker-labels label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+
+#speaker-labels input {
+  margin-top: 0.3rem;
+  padding: 0.4rem;
+  border-radius: 4px;
+  border: 1px solid #ced4da;
+}
