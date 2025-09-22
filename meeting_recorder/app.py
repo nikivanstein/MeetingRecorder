@@ -21,7 +21,6 @@ def build_label_map(label_rows: Optional[List[List[str]]]) -> Dict[str, str]:
     """Create a mapping from diarised speaker identifiers to user supplied labels."""
 
     label_map: Dict[str, str] = {}
-
     for row in label_rows:
         if not row or len(row) < 2:
             continue
