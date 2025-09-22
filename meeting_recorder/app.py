@@ -21,7 +21,7 @@ def build_label_map(label_rows: Optional[List[List[str]]]) -> Dict[str, str]:
     """Create a mapping from diarised speaker identifiers to user supplied labels."""
 
     label_map: Dict[str, str] = {}
-    if not label_rows:
+    if label_rows.empty() or not label_rows:
         return label_map
     for row in label_rows:
         if not row or len(row) < 2:
@@ -82,7 +82,7 @@ class MeetingRecorderApp:
                 sources=["microphone"],
                 type="filepath",
                 streaming=False,
-                waveform_options={"show_recording_duration": True},
+                #waveform_options={"show_recording_duration": True},
                 label="Meeting Recorder",
             )
             with gr.Row():
