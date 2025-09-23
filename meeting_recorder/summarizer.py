@@ -6,6 +6,7 @@ import json
 import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Sequence
+import httpx
 
 try:
     import requests
@@ -34,40 +35,35 @@ class OpenAISummariser(Summariser):
     def __init__(self, api_key: str, model: str | None = None, base_url: str | None = None) -> None:
         if not api_key:
             raise ValueError("OpenAI API key is required")
-        if OpenAI is None:
-            raise RuntimeError("The openai package is required for the OpenAI summariser.")
-        self.api_key = api_key
         self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
         self.base_url = base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        client_kwargs = {"api_key": api_key}
-        if self.base_url:
-            client_kwargs["base_url"] = self.base_url
-        self.client = OpenAI(**client_kwargs)
-        self._client = self.client.with_options(timeout=60)
 
 
-    def summarise(self, transcript: TranscriptionResult) -> Dict[str, object]:  # noqa: D401 - inherited
+        self.client = OpenAI(api_key=api_key, base_url=self.base_url, max_retries=2)
+        self._client = self.client  # with_options is fine too, but not required
+
+        # Connectivity probe
+        try:
+            self.client.models.list()
+        except Exception as e:
+            raise RuntimeError(f"OpenAI connectivity failed (base_url={self.base_url}). "
+                               f"Check API key, DNS/proxy, and SSL.") from e
+
+    def summarise(self, transcript: TranscriptionResult) -> dict:
         completion = self._client.chat.completions.create(
             model=self.model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an assistant that creates meeting minutes. "
-                        "Reply in JSON with keys 'summary' (a multi-paragraph summary) and "
-                        "'action_items' (a list of objects with 'description' and optional 'owner')."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": _segments_to_prompt(transcript.segments),
-                },
+                {"role": "system", "content": (
+                    "You are an assistant that creates meeting minutes. "
+                    "Reply in JSON with keys 'summary' and 'action_items' "
+                    "(list of objects with 'description' and optional 'owner')."
+                )},
+                {"role": "user", "content": _segments_to_prompt(transcript.segments)},
             ],
-            temperature=0.2,
+            temperature=0.8,
             response_format={"type": "json_object"},
         )
-        choice = completion.choices[0]
-        content = choice.message.content or "{}"
+        content = completion.choices[0].message.content or "{}"
         return _parse_summary_response(content)
 
 
