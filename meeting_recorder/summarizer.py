@@ -12,6 +12,11 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
     requests = None  # type: ignore
 
+try:
+    from openai import OpenAI
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    OpenAI = None  # type: ignore
+
 from .models import SpeakerSegment, TranscriptionResult
 
 
@@ -29,17 +34,22 @@ class OpenAISummariser(Summariser):
     def __init__(self, api_key: str, model: str | None = None, base_url: str | None = None) -> None:
         if not api_key:
             raise ValueError("OpenAI API key is required")
-        if requests is None:
-            raise RuntimeError("The requests package is required for the OpenAI summariser.")
+        if OpenAI is None:
+            raise RuntimeError("The openai package is required for the OpenAI summariser.")
         self.api_key = api_key
         self.model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
         self.base_url = base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        client_kwargs = {"api_key": api_key}
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+        self.client = OpenAI(**client_kwargs)
+        self._client = self.client.with_options(timeout=60)
 
 
     def summarise(self, transcript: TranscriptionResult) -> Dict[str, object]:  # noqa: D401 - inherited
-        payload = {
-            "model": self.model,
-            "messages": [
+        completion = self._client.chat.completions.create(
+            model=self.model,
+            messages=[
                 {
                     "role": "system",
                     "content": (
@@ -53,18 +63,11 @@ class OpenAISummariser(Summariser):
                     "content": _segments_to_prompt(transcript.segments),
                 },
             ],
-            "temperature": 0.2,
-            "response_format": {"type": "json_object"},
-        }
-        response = requests.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            json=payload,
-            timeout=60,
+            temperature=0.2,
+            response_format={"type": "json_object"},
         )
-        response.raise_for_status()
-        choice = response.json()["choices"][0]
-        content = choice["message"]["content"]
+        choice = completion.choices[0]
+        content = choice.message.content or "{}"
         return _parse_summary_response(content)
 
 
