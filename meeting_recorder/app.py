@@ -77,11 +77,21 @@ class MeetingRecorderApp:
                 "Record meetings, transcribe with speaker identification, and generate concise notes."
             )
             audio = gr.Audio(
-                sources=["microphone"],
+                sources=["microphone", "upload"],
                 type="filepath",
                 streaming=False,
                 #waveform_options={"show_recording_duration": True},
                 label="Meeting Recorder",
+            )
+            recording_state = gr.State()
+            transcription_state = gr.State()
+            summary_state = gr.State()
+            recording_file = gr.File(label="Download Recording", interactive=False, visible=False)
+
+            audio.change(
+                self.store_recording,
+                inputs=[audio],
+                outputs=[recording_state, recording_file],
             )
             with gr.Row():
                 start_btn = gr.Button("Start Recording", elem_id="start-recording")
@@ -94,10 +104,7 @@ class MeetingRecorderApp:
             resume_btn.click(fn=None, inputs=None, outputs=None, js=_JS_RESUME_RECORDING)
             stop_btn.click(fn=None, inputs=None, outputs=None, js=_JS_STOP_RECORDING)
 
-            transcription_state = gr.State()
-            summary_state = gr.State()
-
-            status = gr.Markdown("Ready to record.")
+            status = gr.Markdown("Ready to record or upload audio.")
             transcribe_btn = gr.Button("Transcribe Recording", variant="primary")
             transcript_text = gr.Textbox(label="Transcript", lines=8)
             segments_df = gr.Dataframe(
@@ -115,7 +122,7 @@ class MeetingRecorderApp:
 
             transcribe_btn.click(
                 self.transcribe,
-                inputs=[audio],
+                inputs=[recording_state],
                 outputs=[
                     transcription_state,
                     transcript_text,
@@ -167,7 +174,7 @@ class MeetingRecorderApp:
 
     def transcribe(self, audio_path: Optional[str]):
         if not audio_path:
-            return None, "", [], [], "Please record audio before transcribing."
+            return None, "", [], [], "Please record or upload audio before transcribing."
         result = self.transcriber.transcribe(audio_path)
         payload = result.to_payload()
         transcript_text = result.text
@@ -189,6 +196,11 @@ class MeetingRecorderApp:
         summary_md = summary.get("summary", "Summary unavailable.")
         action_md = format_action_items(summary.get("action_items", []))
         return summary_md, action_md, summary, "Summary generated successfully."
+
+    def store_recording(self, audio_path: Optional[str]):
+        if not audio_path:
+            return None, gr.update(value=None, visible=False)
+        return audio_path, gr.update(value=audio_path, visible=True)
 
     def save(
         self,
