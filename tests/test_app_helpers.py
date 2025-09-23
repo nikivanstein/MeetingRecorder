@@ -12,6 +12,5 @@ def test_format_action_items_formats_owner():
         {"description": "Follow up with client", "owner": "Bob"},
         {"description": ""},
     ])
-    assert "Bob" in markdown
-    assert "Follow up" in markdown
+    assert "- Bob: Follow up with client" in markdown
     assert "No action" not in markdown

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable
 
@@ -28,12 +29,20 @@ def serialise_segments(segments: Iterable[SpeakerSegment]) -> str:
     return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class SavedArtifacts:
+    """Paths to the files written for a meeting recording."""
+
+    summary_path: Path
+    transcript_path: Path
+
+
 def save_meeting_artifacts(
     transcript: TranscriptionResult,
     summary: Dict[str, object],
     output_dir: str | Path | None = None,
-) -> Path:
-    """Persist the transcript and summary into a timestamped text file."""
+) -> SavedArtifacts:
+    """Persist the transcript and summary into timestamped files."""
 
     directory = ensure_directory(output_dir or "meeting_outputs")
     timestamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -59,8 +68,12 @@ def save_meeting_artifacts(
             "\n".join(action_lines) or "- No action items",
         ]
     )
-    file_path.write_text(content)
-    return file_path
+    file_path.write_text(content, encoding="utf-8")
+
+    transcript_path = directory / f"meeting_{timestamp}_transcript.txt"
+    transcript_path.write_text(serialise_segments(transcript.segments), encoding="utf-8")
+
+    return SavedArtifacts(summary_path=file_path, transcript_path=transcript_path)
 
 
 def _format_ts(value: float) -> str:
@@ -68,4 +81,9 @@ def _format_ts(value: float) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
-__all__ = ["save_meeting_artifacts", "serialise_segments", "ensure_directory"]
+__all__ = [
+    "SavedArtifacts",
+    "ensure_directory",
+    "save_meeting_artifacts",
+    "serialise_segments",
+]

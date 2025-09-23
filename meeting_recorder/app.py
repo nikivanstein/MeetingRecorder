@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional
-
-from .emailer import EmailClient
 from .models import SpeakerSegment, TranscriptionResult
 from .storage import save_meeting_artifacts
 from .summarizer import Summariser, get_summariser
@@ -52,10 +51,10 @@ def _format_ts(value: float) -> str:
 def format_action_items(action_items: Iterable[Dict[str, str]]) -> str:
     lines = []
     for item in action_items:
-        owner = item.get("owner", "Unassigned")
-        description = item.get("description", "")
+        owner = (item.get("owner") or "Unassigned").strip() or "Unassigned"
+        description = (item.get("description") or "").strip()
         if description:
-            lines.append(f"- **{owner}**: {description}")
+            lines.append(f"- {owner}: {description}")
     return "\n".join(lines) or "No action items detected."
 
 
@@ -67,7 +66,6 @@ class MeetingRecorderApp:
             raise RuntimeError("Gradio is required to launch the Meeting Recorder UI. Install the optional dependencies.")
         self.transcriber: Transcriber = get_transcriber()
         self.summariser: Summariser = get_summariser()
-        self.email_client = EmailClient.from_env()
         self.interface = self._build_interface()
 
     def _build_interface(self) -> gr.Blocks:
@@ -107,6 +105,11 @@ class MeetingRecorderApp:
             status = gr.Markdown("Ready to record or upload audio.")
             transcribe_btn = gr.Button("Transcribe Recording", variant="primary")
             transcript_text = gr.Textbox(label="Transcript", lines=8)
+            transcript_upload = gr.File(
+                label="Upload Transcript",
+                file_types=["text", ".md", ".txt"],
+                type="filepath",
+            )
             segments_df = gr.Dataframe(
                 headers=["Speaker", "Start", "End", "Text"],
                 datatype=["str", "str", "str", "str"],
@@ -132,36 +135,45 @@ class MeetingRecorderApp:
                 ],
             )
 
+            transcript_upload.change(
+                self.load_transcript,
+                inputs=[transcript_upload],
+                outputs=[
+                    transcription_state,
+                    transcript_text,
+                    segments_df,
+                    speaker_label_df,
+                    status,
+                ],
+            )
+
             summarise_btn = gr.Button("Summarise & Extract Actions", variant="secondary")
-            summary_markdown = gr.Markdown(label="Meeting Summary")
-            actions_markdown = gr.Markdown(label="Action Items")
+            summary_text = gr.Textbox(label="Meeting Summary", lines=8)
+            actions_text = gr.Textbox(label="Action Items", lines=6)
+            saved_summary_file = gr.File(
+                label="Saved Meeting Notes", interactive=False, visible=False
+            )
+            saved_transcript_file = gr.File(
+                label="Saved Transcript", interactive=False, visible=False
+            )
 
             summarise_btn.click(
                 self.summarise,
                 inputs=[transcription_state, speaker_label_df],
-                outputs=[summary_markdown, actions_markdown, summary_state, status],
-            )
-
-            with gr.Row():
-                send_email = gr.Checkbox(label=self._email_label(), value=False)
-                save_btn = gr.Button("Save Results", variant="secondary")
-            saved_file = gr.File(label="Saved Meeting Notes")
-
-            save_btn.click(
-                self.save,
-                inputs=[transcription_state, summary_state, send_email],
-                outputs=[saved_file, status],
+                outputs=[
+                    summary_text,
+                    actions_text,
+                    summary_state,
+                    status,
+                    saved_summary_file,
+                    saved_transcript_file,
+                ],
             )
 
             gr.Markdown(
                 """Configure API keys via environment variables such as ``ASSEMBLYAI_API_KEY`` and ``OPENAI_API_KEY``."""
             )
         return demo
-
-    def _email_label(self) -> str:
-        if self.email_client:
-            return f"Email results to {self.email_client.config.recipient}"
-        return "Email results (configure SMTP via environment variables)"
 
     def launch(self, **kwargs: object) -> gr.Blocks:
         """Expose the underlying Gradio interface to callers."""
@@ -186,16 +198,92 @@ class MeetingRecorderApp:
         label_table = [[speaker, speaker] for speaker in unique_speakers]
         return payload, transcript_text, segments_table, label_table, "Transcription complete."
 
-    def summarise(self, payload: Optional[Dict[str, object]], label_rows: Optional[List[List[str]]]):
+    def load_transcript(self, transcript_path: Optional[str]):
+        if not transcript_path:
+            message = "Select a transcript file to load."
+            return None, "", [], [], message
+        path = Path(transcript_path)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError as exc:
+            return None, "", [], [], f"Failed to read transcript: {exc}"
+        stripped = text.strip()
+        if not stripped:
+            return None, "", [], [], f"{path.name} is empty."
+        segments: List[SpeakerSegment] = []
+        for idx, raw_line in enumerate(text.splitlines()):
+            line = raw_line.strip()
+            if not line:
+                continue
+            speaker = "Transcript"
+            content = line
+            if ":" in line:
+                potential_speaker, remainder = line.split(":", 1)
+                if potential_speaker.strip() and remainder.strip():
+                    speaker = potential_speaker.strip()
+                    content = remainder.strip()
+            segments.append(
+                SpeakerSegment(
+                    speaker=speaker,
+                    start=float(idx),
+                    end=float(idx + 1),
+                    text=content,
+                )
+            )
+        if not segments:
+            segments.append(
+                SpeakerSegment(speaker="Transcript", start=0.0, end=0.0, text=stripped)
+            )
+        result = TranscriptionResult(segments=segments)
+        payload = result.to_payload()
+        segments_table = format_segments_table(result.segments)
+        unique_speakers: List[str] = []
+        for segment in result.segments:
+            if segment.speaker not in unique_speakers:
+                unique_speakers.append(segment.speaker)
+        label_table = [[speaker, speaker] for speaker in unique_speakers]
+        status = f"Loaded transcript from {path.name}."
+        return payload, text, segments_table, label_table, status
+
+    def summarise(
+        self,
+        payload: Optional[Dict[str, object]],
+        label_rows: Optional[List[List[str]]],
+    ):
+        empty_files = (
+            gr.update(value=None, visible=False),
+            gr.update(value=None, visible=False),
+        )
         if not payload:
-            return "", "", None, "Transcribe the recording before summarising."
+            return (
+                "",
+                "",
+                None,
+                "Transcribe or upload a transcript before summarising.",
+                *empty_files,
+            )
         transcription = TranscriptionResult.from_payload(payload)
         labels = build_label_map(label_rows)
         labelled = transcription.apply_labels(labels) if labels else transcription
         summary = self.summariser.summarise(labelled)
-        summary_md = summary.get("summary", "Summary unavailable.")
-        action_md = format_action_items(summary.get("action_items", []))
-        return summary_md, action_md, summary, "Summary generated successfully."
+        summary_text = str(summary.get("summary", "Summary unavailable."))
+        actions_text = format_action_items(summary.get("action_items", []))
+        artifacts = save_meeting_artifacts(labelled, summary)
+        status_message = (
+            "Summary generated successfully. "
+            f"Results saved to {artifacts.summary_path}. "
+            f"Transcript saved to {artifacts.transcript_path}."
+        )
+        return (
+            summary_text,
+            actions_text,
+            summary,
+            status_message,
+            gr.update(value=str(artifacts.summary_path), visible=True),
+            gr.update(value=str(artifacts.transcript_path), visible=True),
+        )
 
     def store_recording(self, audio_path: Optional[str]):
         if not audio_path:
@@ -206,28 +294,17 @@ class MeetingRecorderApp:
         self,
         payload: Optional[Dict[str, object]],
         summary_payload: Optional[Dict[str, object]],
-        send_email: bool,
     ):
         if not payload:
-            return None, "Please transcribe and summarise the meeting before saving."
+            return None, None, "Please provide a transcript before saving."
         transcription = TranscriptionResult.from_payload(payload)
         summary = summary_payload or {"summary": transcription.text, "action_items": []}
-        file_path = save_meeting_artifacts(transcription, summary)
-        status = f"Results saved to {file_path}."
-        if send_email:
-            if self.email_client:
-                try:
-                    self.email_client.send(
-                        subject="Meeting Notes",
-                        body="Please find the meeting notes attached.",
-                        attachment=file_path,
-                    )
-                    status += " Email sent successfully."
-                except Exception as exc:  # pragma: no cover - network failure guard
-                    status += f" Email delivery failed: {exc}."
-            else:
-                status += " Email configuration not available."
-        return str(file_path), status
+        artifacts = save_meeting_artifacts(transcription, summary)
+        status = (
+            f"Results saved to {artifacts.summary_path}. "
+            f"Transcript saved to {artifacts.transcript_path}."
+        )
+        return str(artifacts.summary_path), str(artifacts.transcript_path), status
 
 
 def create_app() -> MeetingRecorderApp:
