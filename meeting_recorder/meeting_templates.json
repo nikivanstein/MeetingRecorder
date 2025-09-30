@@ -1,0 +1,10 @@
+{
+  "default": "meeting_minutes",
+  "templates": [
+    {
+      "id": "meeting_minutes",
+      "name": "Meeting Minutes",
+      "content": "# Meeting Minutes\n\n**Title:** [Meeting Title]\n**Date:** {meeting_date}\n**Time:** {time_range}\n**Location/Platform:** [Zoom / Office / etc.]\n**Participants:** [Name 1, Name 2, Name 3]\n**Moderator:** [Name]\n**Recorder:** [Name]\n\n---\n\n## Summary\n[One-paragraph overview of meeting purpose and main outcomes.]\n\n---\n\n## Decisions\n- [Decision 1 — short, clear sentence]\n- [Decision 2]\n- [Decision 3]\n\n---\n\n## Action Points\n| ID | Action Item | Responsible | Deadline | Status |\n|----|-------------|-------------|----------|--------|\n| AP-1 | [Description] | [Name] | [YYYY-MM-DD] | Open |\n| AP-2 | [Description] | [Name] | [YYYY-MM-DD] | Open |\n\n---\n\n## Topics Discussed\n\n### Topic 1: [Title]\n- **Discussion Summary:**\n  [Key points of discussion]\n- **Related Decisions:**\n  - [Decision]\n- **Follow-ups:**\n  - [Action or open issue]\n\n### Topic 2: [Title]\n- **Discussion Summary:**\n  [Key points of discussion]\n- **Related Decisions:**\n  - [Decision]\n- **Follow-ups:**\n  - [Action or open issue]\n\n---\n\n## Next Meeting\n- **Proposed Date/Time:** [YYYY-MM-DD, HH:MM]\n- **Tentative Agenda:**\n  - [Item 1]\n  - [Item 2]\n\n---\n\n**Document Generated:** {generated_timestamp}\n"
+    }
+  ]
+}
