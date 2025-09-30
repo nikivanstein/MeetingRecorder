@@ -21,8 +21,11 @@ def test_serialise_segments_formats_text():
 def test_save_meeting_artifacts_writes_file(tmp_path: Path):
     transcription = build_transcription()
     summary = {"summary": "Summary text", "action_items": [{"description": "Action", "owner": "Dana"}]}
-    file_path = save_meeting_artifacts(transcription, summary, output_dir=tmp_path)
-    assert file_path.exists()
-    contents = file_path.read_text()
+    artifacts = save_meeting_artifacts(transcription, summary, output_dir=tmp_path)
+    assert artifacts.summary_path.exists()
+    assert artifacts.transcript_path.exists()
+    contents = artifacts.summary_path.read_text()
     assert "Summary text" in contents
     assert "Dana" in contents
+    transcript_contents = artifacts.transcript_path.read_text()
+    assert "Speaker 1" in transcript_contents
