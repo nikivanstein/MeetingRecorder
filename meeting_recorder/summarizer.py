@@ -19,6 +19,7 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     OpenAI = None  # type: ignore
 
 from .models import SpeakerSegment, TranscriptionResult
+from .templates import render_template_for_prompt
 
 
 class Summariser(ABC):
@@ -50,14 +51,19 @@ class OpenAISummariser(Summariser):
                                f"Check API key, DNS/proxy, and SSL.") from e
 
     def summarise(self, transcript: TranscriptionResult) -> dict:
+        template = render_template_for_prompt(transcript)
+        system_prompt = (
+            "You are an assistant that creates meeting minutes. "
+            "Use the provided template to structure the meeting summary. "
+            "Fill in placeholders using the transcript and mark unknown values as 'TBD'. "
+            "Reply in JSON with keys 'summary' (a markdown string following the template) "
+            "and 'action_items' (list of objects with 'description' and optional 'owner').\n\n"
+            f"TEMPLATE:\n{template}"
+        )
         completion = self._client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": (
-                    "You are an assistant that creates meeting minutes. "
-                    "Reply in JSON with keys 'summary' and 'action_items' "
-                    "(list of objects with 'description' and optional 'owner')."
-                )},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": _segments_to_prompt(transcript.segments)},
             ],
             temperature=0.8,
@@ -78,8 +84,12 @@ class OllamaSummariser(Summariser):
             raise RuntimeError("The requests package is required for the Ollama summariser.")
 
     def summarise(self, transcript: TranscriptionResult) -> Dict[str, object]:  # noqa: D401 - inherited
+        template = render_template_for_prompt(transcript)
         prompt = (
-            "You produce meeting summaries. Return JSON with 'summary' and 'action_items'.\n"
+            "You produce meeting summaries. Use the provided template to structure the summary "
+            "and fill placeholders with transcript insights, marking unknown values as 'TBD'.\n"
+            "Return JSON with 'summary' (markdown following the template) and 'action_items'.\n"
+            f"TEMPLATE:\n{template}\n"
             + _segments_to_prompt(transcript.segments)
         )
         response = requests.post(
@@ -97,12 +107,14 @@ class DummySummariser(Summariser):
     """A predictable summariser used for tests and offline usage."""
 
     def summarise(self, transcript: TranscriptionResult) -> Dict[str, object]:  # noqa: D401 - inherited
+        summary_template = render_template_for_prompt(transcript)
         summary = f"Meeting recap involving {len(transcript.segments)} segments."
         actions: List[Dict[str, str]] = []
         for segment in transcript.segments:
             if "action" in segment.text.lower():
                 actions.append({"description": segment.text, "owner": segment.speaker})
-        return {"summary": summary, "action_items": actions}
+        enriched_summary = _apply_basic_template_fill(summary_template, summary, actions)
+        return {"summary": enriched_summary, "action_items": actions}
 
 
 def get_summariser() -> Summariser:
@@ -154,6 +166,32 @@ def _parse_summary_response(content: str) -> Dict[str, object]:
 def _format_timestamp(value: float) -> str:
     minutes, seconds = divmod(int(value), 60)
     return f"{minutes:02d}:{seconds:02d}"
+
+
+def _apply_basic_template_fill(template: str, overview: str, action_items: Sequence[Dict[str, str]]) -> str:
+    """Inject simple default values into the built-in template for deterministic tests."""
+
+    filled = template.replace("[Meeting Title]", "Automated Meeting Notes")
+    filled = filled.replace(
+        "[One-paragraph overview of meeting purpose and main outcomes.]", overview
+    )
+    if action_items:
+        rows = []
+        for index, item in enumerate(action_items, start=1):
+            description = item.get("description", "Task")
+            owner = item.get("owner", "Unassigned")
+            rows.append(
+                f"| AP-{index} | {description} | {owner} | TBD | Open |"
+            )
+        table = "\n".join(rows)
+    else:
+        table = "| AP-1 | No action items detected | Unassigned | - | Closed |"
+    placeholder_block = (
+        "| AP-1 | [Description] | [Name] | [YYYY-MM-DD] | Open |\n"
+        "| AP-2 | [Description] | [Name] | [YYYY-MM-DD] | Open |"
+    )
+    filled = filled.replace(placeholder_block, table)
+    return filled
 
 
 __all__ = [

@@ -13,6 +13,7 @@ def build_transcript() -> TranscriptionResult:
 def test_dummy_summariser_extracts_actions():
     summary = DummySummariser().summarise(build_transcript())
     assert summary["action_items"][0]["owner"] == "B"
+    assert "Automated Meeting Notes" in summary["summary"]
 
 
 def test_parse_summary_response_handles_strings():
